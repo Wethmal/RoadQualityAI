@@ -13,13 +13,31 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourname.roadqualityai",
+      "config": {
+        "googleMapsApiKey": "AIzaSyD10BuXahvSztGTXNomZ2ym5teXwA5-ml0"
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "අපි පාරේ තත්ත්වය පරීක්ෂා කිරීමට ඔබගේ ස්ථානය භාවිතා කරමු."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "package": "com.yourname.roadqualityai",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyD10BuXahvSztGTXNomZ2ym5teXwA5-ml0"
+        }
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "FOREGROUND_SERVICE"
+      ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
