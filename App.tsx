@@ -697,7 +697,7 @@ const styles = StyleSheet.create({
   preTripBox: { backgroundColor: '#1e293b', padding: 24, borderRadius: 20, elevation: 10 },
   routeLabel: {
     color: '#64748b', fontSize: 10, fontWeight: '700',
-    letterSpacing: 1.2, textAlign: 'center', marginBottom: 6,
+    letterSpacing: 1.2, textAlign: 'center', marginBottom: 6, 
   },
   routeInfoText: {
     color: 'white', textAlign: 'center', fontSize: 24, fontWeight: '800', marginBottom: 4,
