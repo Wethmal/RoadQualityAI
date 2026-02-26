@@ -1,103 +1,86 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { onAuthStateChanged } from 'firebase/auth';
-import { Ionicons } from '@expo/vector-icons';
-
-// Config & Services
-import { auth } from './src/config/firebase';
-
-// Screens
-import AuthScreen from './src/screens/AuthScreen';
-import MapScreen from './src/screens/MapScreen';
-import LeaderboardScreen from './src/screens/LeaderboardScreen';
-
-// Types
+import { ref, get } from 'firebase/database';
+import { auth, database } from './src/config/firebase';
+import { AuthScreen } from './src/screens/AuthScreen';
+import { MapScreen } from './src/screens/MapScreen';
+import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { User } from './src/types';
 
 const Tab = createBottomTabNavigator();
 
 export default function App() {
-  const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
+  const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
-    // Firebase Auth listener to track session [cite: 196, 255]
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // User is logged in [cite: 319]
-        // Note: In a real app, you might fetch full user profile from DB here
-        setUser({
-          id: firebaseUser.uid,
-          name: firebaseUser.displayName || 'Driver',
-          email: firebaseUser.email || '',
-          totalPoints: 0,
-          rank: 0,
-          status: 'active',
-          registeredAt: Date.now()
-        });
+        try {
+          const snapshot = await get(ref(database, `users/${firebaseUser.uid}`));
+          if (snapshot.exists()) {
+            setUser({ id: firebaseUser.uid, ...snapshot.val() });
+          }
+        } catch {
+          setUser(null);
+        }
       } else {
-        // User is logged out
         setUser(null);
       }
-      setLoading(false);
+      setInitializing(false);
     });
 
-    return unsubscribe; // Cleanup listener
+    return () => unsubscribe();
   }, []);
 
-  if (loading) {
+  if (initializing) {
     return (
-      <View style={styles.centered}>
+      <View style={styles.loading}>
         <ActivityIndicator size="large" color="#1a56db" />
       </View>
     );
   }
 
+  if (!user) {
+    return <AuthScreen onAuthSuccess={(u) => setUser(u)} />;
+  }
+
   return (
     <NavigationContainer>
-      {user ? (
-        <Tab.Navigator
-          screenOptions={({ route }: { route: any }) => ({
-            headerShown: false,
-            tabBarStyle: styles.tabBar,
-            tabBarActiveTintColor: '#1a56db',
-            tabBarInactiveTintColor: '#94a3b8',
-            tabBarIcon: ({ color, size }: { color: string; size: number }) => {
-              let iconName: any;
-              if (route.name === 'Map') iconName = 'map-outline';
-              else if (route.name === 'Leaderboard') iconName = 'trophy-outline';
-              return <Ionicons name={iconName} size={size} color={color} />;
-            },
-          })}
-        >
-          <Tab.Screen name="Map">
-            {() => <MapScreen user={user} />}
-          </Tab.Screen>
-          <Tab.Screen name="Leaderboard">
-            {() => <LeaderboardScreen currentUserId={user.id} />}
-          </Tab.Screen>
-        </Tab.Navigator>
-      ) : (
-        <AuthScreen onAuthSuccess={(userData) => setUser(userData)} />
-      )}
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarStyle: styles.tabBar,
+          tabBarActiveTintColor: '#1a56db',
+          tabBarInactiveTintColor: '#64748b',
+          tabBarLabel: route.name,
+        })}
+      >
+        <Tab.Screen name="Map">
+          {() => <MapScreen user={user} />}
+        </Tab.Screen>
+        <Tab.Screen name="Leaderboard">
+          {() => <LeaderboardScreen currentUserId={user.id} />}
+        </Tab.Screen>
+      </Tab.Navigator>
     </NavigationContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  centered: {
+  loading: {
     flex: 1,
+    backgroundColor: '#0f172a',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0f172a', // Matches project dark theme 
   },
   tabBar: {
     backgroundColor: '#0f172a',
-    borderTopWidth: 0,
-    elevation: 10,
+    borderTopColor: '#1e293b',
     height: 60,
-    paddingBottom: 10,
+    paddingBottom: 8,
   },
 });

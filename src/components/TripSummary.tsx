@@ -1,5 +1,12 @@
-import React from 'react';
-import { StyleSheet, Text, View, Modal, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import {
+  Animated,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { TripStats } from '../types';
 
 interface TripSummaryProps {
@@ -8,161 +15,125 @@ interface TripSummaryProps {
   onDone: () => void;
 }
 
-const TripSummary: React.FC<TripSummaryProps> = ({ visible, stats, onDone }) => {
-  // Score based Verdict and Color Logic
-  const getVerdict = () => {
-    if (stats.score >= 80) return { text: "Excellent Driver", color: "#22c55e" };
-    if (stats.score >= 50) return { text: "Drive More Carefully", color: "#f97316" };
-    return { text: "Dangerous Driving Detected", color: "#ef4444" };
-  };
+const getVerdict = (score: number) => {
+  if (score >= 80) return { text: 'Excellent Driver! 🏆', color: '#22c55e' };
+  if (score >= 50) return { text: 'Drive More Carefully ⚠️', color: '#f97316' };
+  return { text: 'Dangerous Driving Detected 🚨', color: '#ef4444' };
+};
 
-  const verdict = getVerdict();
+export const TripSummary: React.FC<TripSummaryProps> = ({ visible, stats, onDone }) => {
+  const slideAnim = useRef(new Animated.Value(400)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        damping: 20,
+        stiffness: 200,
+      }).start();
+    } else {
+      slideAnim.setValue(400);
+    }
+  }, [visible]);
+
+  const verdict = getVerdict(stats?.score ?? 0);
+  const scoreBorder = verdict.color;
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={false}
-      presentationStyle="fullScreen"
-    >
-      <View style={styles.container}>
-        <ScrollView contentContainerStyle={styles.content}>
+    <Modal visible={visible} transparent animationType="none" statusBarTranslucent>
+      <View style={styles.overlay}>
+        <Animated.View
+          style={[styles.card, { transform: [{ translateY: slideAnim }] }]}
+        >
           <Text style={styles.title}>Trip Summary</Text>
 
-          {/* Large Score Circle */}
-          <View style={[styles.scoreCircle, { borderColor: verdict.color }]}>
-            <Text style={[styles.scoreNumber, { color: verdict.color }]}>{stats.score}</Text>
-            <Text style={styles.scoreLabel}>SAFETY SCORE</Text>
+          {/* Score Circle */}
+          <View style={[styles.scoreCircle, { borderColor: scoreBorder }]}>
+            <Text style={[styles.scoreNumber, { color: scoreBorder }]}>
+              {stats?.score ?? 0}
+            </Text>
+            <Text style={styles.scoreLabel}>SCORE</Text>
           </View>
 
-          <Text style={[styles.verdictText, { color: verdict.color }]}>
-            {verdict.text}
-          </Text>
+          <Text style={[styles.verdict, { color: scoreBorder }]}>{verdict.text}</Text>
 
-          {/* 2x2 Grid Stats */}
+          {/* Stats Grid */}
           <View style={styles.grid}>
             <View style={styles.gridItem}>
-              <Text style={styles.statLabel}>Distance</Text>
-              <Text style={styles.statValue}>{stats.distance.toFixed(1)}</Text>
-              <Text style={styles.statUnit}>KM</Text>
+              <Text style={styles.gridValue}>{(stats?.distance ?? 0).toFixed(1)}</Text>
+              <Text style={styles.gridLabel}>Distance (km)</Text>
             </View>
-
             <View style={styles.gridItem}>
-              <Text style={styles.statLabel}>Duration</Text>
-              <Text style={styles.statValue}>{Math.floor(stats.duration / 60)}</Text>
-              <Text style={styles.statUnit}>MIN</Text>
+              <Text style={styles.gridValue}>{stats?.duration ?? 0}</Text>
+              <Text style={styles.gridLabel}>Duration (min)</Text>
             </View>
-
             <View style={styles.gridItem}>
-              <Text style={styles.statLabel}>Potholes</Text>
-              <Text style={styles.statValue}>{stats.potholes}</Text>
-              <Text style={styles.statUnit}>DETECTED</Text>
+              <Text style={styles.gridValue}>{stats?.potholes ?? 0}</Text>
+              <Text style={styles.gridLabel}>Potholes</Text>
             </View>
-
             <View style={styles.gridItem}>
-              <Text style={styles.statLabel}>Top Speed</Text>
-              <Text style={styles.statValue}>{stats.topSpeed}</Text>
-              <Text style={styles.statUnit}>KM/H</Text>
+              <Text style={styles.gridValue}>{stats?.topSpeed ?? 0}</Text>
+              <Text style={styles.gridLabel}>Top Speed (km/h)</Text>
             </View>
           </View>
 
-          {/* Done Button */}
           <TouchableOpacity style={styles.doneButton} onPress={onDone}>
-            <Text style={styles.doneButtonText}>DONE</Text>
+            <Text style={styles.doneText}>DONE</Text>
           </TouchableOpacity>
-        </ScrollView>
+        </Animated.View>
       </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     flex: 1,
-    backgroundColor: '#0f172a', // Dark theme background
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'flex-end',
   },
-  content: {
+  card: {
+    backgroundColor: '#1e293b',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 28,
     alignItems: 'center',
-    padding: 24,
-    paddingTop: 60,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#fff',
-    marginBottom: 40,
-  },
+  title: { color: '#f8fafc', fontSize: 20, fontWeight: '700', marginBottom: 20 },
   scoreCircle: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    borderWidth: 8,
-    justifyContent: 'center',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 4,
     alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'center',
+    marginBottom: 12,
   },
-  scoreNumber: {
-    fontSize: 56,
-    fontWeight: '900',
-  },
-  scoreLabel: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  verdictText: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 40,
-    textAlign: 'center',
-  },
+  scoreNumber: { fontSize: 40, fontWeight: 'bold' },
+  scoreLabel: { color: '#94a3b8', fontSize: 12 },
+  verdict: { fontSize: 16, fontWeight: '600', marginBottom: 24 },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
     width: '100%',
-    marginBottom: 40,
+    marginBottom: 24,
+    gap: 12,
   },
   gridItem: {
-    width: '48%',
-    backgroundColor: '#1e293b',
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 16,
+    width: '47%',
+    backgroundColor: '#0f172a',
+    borderRadius: 12,
+    padding: 14,
     alignItems: 'center',
   },
-  statLabel: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  statValue: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  statUnit: {
-    color: '#64748b',
-    fontSize: 10,
-    fontWeight: '700',
-    marginTop: 4,
-  },
+  gridValue: { color: '#f8fafc', fontSize: 22, fontWeight: '700' },
+  gridLabel: { color: '#94a3b8', fontSize: 12, marginTop: 4 },
   doneButton: {
     backgroundColor: '#1a56db',
-    width: '100%',
-    height: 56,
+    paddingVertical: 14,
+    paddingHorizontal: 60,
     borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 10,
   },
-  doneButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  doneText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
 });
-
-export default TripSummary;

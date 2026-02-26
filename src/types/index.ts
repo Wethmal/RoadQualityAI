@@ -1,22 +1,15 @@
-/**
- * SafeRoute AI - TypeScript Type Definitions
- * Location: src/types/index.ts
- */
-
-export type AlertType = 'pothole' | 'speed' | 'proximity' | 'crash' | 'braking';
-
 export interface Pothole {
   id: string;
   latitude: number;
   longitude: number;
-  bumpForce: string; // Accelerometer force value (e.g., "High", "Medium")
-  detectedBy: string; // User ID of the first reporter
+  bumpForce: string;
+  detectedBy: string;
   timestamp: number;
   status: 'active' | 'resolved';
-  reporters: Record<string, boolean>; // Map of UserIDs who confirmed this pothole
+  reporters: Record<string, string>;
   confirmationCount: number;
-  cleanPasses: number; // Number of times users passed without a bump
-  cleanPassers: Record<string, boolean>; // Map of UserIDs who contributed to resolving it
+  cleanPasses: number;
+  cleanPassers: Record<string, string>;
 }
 
 export interface User {
@@ -32,18 +25,10 @@ export interface User {
 export interface Trip {
   id: string;
   userId: string;
-  startLocation: {
-    latitude: number;
-    longitude: number;
-    address?: string;
-  };
-  endLocation: {
-    latitude: number;
-    longitude: number;
-    address?: string;
-  };
-  distance: number; // in kilometers
-  duration: number; // in seconds or minutes
+  startLocation: string;
+  endLocation: string;
+  distance: number;
+  duration: number;
   harshBrakesCount: number;
   tripScore: number;
   startTime: number;
@@ -68,6 +53,8 @@ export interface EmergencyContact {
   notifySms: boolean;
   notifyCall: boolean;
 }
+
+export type AlertType = 'pothole' | 'speed' | 'proximity' | 'crash' | 'braking';
 
 export interface TripStats {
   distance: number;

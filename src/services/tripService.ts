@@ -1,96 +1,73 @@
-import { ref, push, update, get, query, orderByChild, equalTo } from 'firebase/database';
+import { ref, push, get, update } from 'firebase/database';
 import { database } from '../config/firebase';
 import { Trip, TripStats } from '../types';
 
-/**
- * 1. Save completed trip data and update user leaderboard statistics
- */
 export const saveTrip = async (
   userId: string,
   stats: TripStats,
   startLocation: string,
   endLocation: string
-): Promise<string | null> => {
+): Promise<void> => {
   try {
-    const tripRef = ref(database, 'trips');
-    
-    const newTripData: Omit<Trip, 'id'> = {
-      userId: userId,
-      startLocation: { latitude: 0, longitude: 0, address: startLocation }, // Coordinates should be passed if available
-      endLocation: { latitude: 0, longitude: 0, address: endLocation },
+    const tripData = {
+      user_id: userId,
+      start_location: startLocation,
+      end_location: endLocation,
       distance: stats.distance,
       duration: stats.duration,
-      harshBrakesCount: 0, // This can be integrated with accelerometer logic
-      tripScore: stats.score,
-      startTime: Date.now() - (stats.duration * 1000), // Approximate start time
-      endTime: Date.now(),
+      harsh_brakes_count: 0,
+      trip_score: stats.score,
+      start_time: Date.now() - stats.duration * 60000,
+      end_time: Date.now(),
+      potholes_detected: stats.potholes,
+      top_speed: stats.topSpeed,
     };
 
-    // Save Trip
-    const newTripRef = await push(tripRef, newTripData);
-    const tripId = newTripRef.key;
+    await push(ref(database, 'trips'), tripData);
 
-    // Update Leaderboard Stats Atomically
-    const leaderboardRef = ref(database, `leaderboard/${userId}`);
-    const snapshot = await get(leaderboardRef);
-    
-    let currentData = {
-      totalScore: 0,
-      totalTrips: 0,
-      potholesDetected: 0
+    // Update leaderboard
+    const lbRef = ref(database, `leaderboard/${userId}`);
+    const snapshot = await get(lbRef);
+    const existing = snapshot.val() || {
+      total_score: 0,
+      total_trips: 0,
+      potholes_detected: 0,
     };
 
-    if (snapshot.exists()) {
-      const val = snapshot.val();
-      currentData = {
-        totalScore: val.totalScore || 0,
-        totalTrips: val.totalTrips || 0,
-        potholesDetected: val.potholesDetected || 0
-      };
-    }
-
-    const leaderboardUpdates: any = {};
-    leaderboardUpdates[`leaderboard/${userId}/totalScore`] = currentData.totalScore + stats.score;
-    leaderboardUpdates[`leaderboard/${userId}/totalTrips`] = currentData.totalTrips + 1;
-    leaderboardUpdates[`leaderboard/${userId}/potholesDetected`] = currentData.potholesDetected + stats.potholes;
-    
-    await update(ref(database), leaderboardUpdates);
-
-    return tripId;
-  } catch (error) {
-    console.error("Error saving trip:", error);
-    throw new Error("Failed to save trip data.");
+    await update(lbRef, {
+      total_score: (existing.total_score || 0) + stats.score,
+      total_trips: (existing.total_trips || 0) + 1,
+      potholes_detected: (existing.potholes_detected || 0) + stats.potholes,
+    });
+  } catch (error: any) {
+    throw new Error(error.message || 'Failed to save trip');
   }
 };
 
-/**
- * 2. Fetch all trips for a specific user, sorted by newest first
- */
 export const getUserTrips = async (userId: string): Promise<Trip[]> => {
   try {
-    const tripsRef = ref(database, 'trips');
-    const userTripsQuery = query(
-      tripsRef, 
-      orderByChild('userId'), 
-      equalTo(userId)
-    );
+    const snapshot = await get(ref(database, 'trips'));
+    if (!snapshot.exists()) return [];
 
-    const snapshot = await get(userTripsQuery);
-    const trips: Trip[] = [];
+    const data = snapshot.val();
+    const trips: Trip[] = Object.entries(data)
+      .map(([id, val]: [string, any]) => ({
+        id,
+        userId: val.user_id,
+        startLocation: val.start_location,
+        endLocation: val.end_location,
+        distance: val.distance,
+        duration: val.duration,
+        harshBrakesCount: val.harsh_brakes_count,
+        tripScore: val.trip_score,
+        startTime: val.start_time,
+        endTime: val.end_time,
+      }))
+      .filter((t) => t.userId === userId)
+      .sort((a, b) => b.startTime - a.startTime);
 
-    if (snapshot.exists()) {
-      snapshot.forEach((childSnapshot) => {
-        trips.push({
-          id: childSnapshot.key as string,
-          ...childSnapshot.val()
-        });
-      });
-    }
-
-    // Sort by startTime descending (Newest first)
-    return trips.sort((a, b) => b.startTime - a.startTime);
-  } catch (error) {
-    console.error("Error fetching trips:", error);
-    throw new Error("Could not retrieve trip history.");
+    return trips;
+  } catch (error: any) {
+    throw new Error(error.message || 'Failed to get trips');
   }
 };

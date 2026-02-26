@@ -1,91 +1,83 @@
 import React, { useState } from 'react';
 import {
-  StyleSheet,
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { registerUser, loginUser } from '../services/authService';
+import { loginUser, registerUser } from '../services/authService';
 import { User } from '../types';
 
 interface AuthScreenProps {
   onAuthSuccess: (user: User) => void;
 }
 
-const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Form Fields
+export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleAuth = async () => {
-    setError(null);
+  const handleSubmit = async () => {
+    setError('');
+
+    if (mode === 'register') {
+      if (!name.trim()) return setError('Name is required');
+      if (password !== confirmPassword) return setError('Passwords do not match');
+    }
+
+    if (!email.trim() || !password.trim()) return setError('Email and password required');
+
     setLoading(true);
-
     try {
-      if (isLogin) {
-        // Login Logic
-        if (!email || !password) throw new Error('Please fill all fields');
-        const user = await loginUser(email, password);
-        onAuthSuccess(user);
-      } else {
-        // Register Logic
-        if (!name || !email || !password || !confirmPassword) throw new Error('Please fill all fields');
-        if (password !== confirmPassword) throw new Error('Passwords do not match');
-        
-        const user = await registerUser(name, email, password);
-        onAuthSuccess(user);
-      }
-    } catch (err: any) {
-      setError(err.message);
+      const user =
+        mode === 'register'
+          ? await registerUser(name, email, password)
+          : await loginUser(email, password);
+      onAuthSuccess(user);
+    } catch (e: any) {
+      setError(e.message || 'Authentication failed');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={styles.logoText}>SafeRoute AI</Text>
-          <Text style={styles.subTitle}>
-            {isLogin ? 'Welcome back, driver' : 'Join the safe driving community'}
-          </Text>
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+      >
+        {/* Logo */}
+        <Text style={styles.logo}>🛣️ SafeRouteAI</Text>
+        <Text style={styles.tagline}>Drive Smart. Stay Safe.</Text>
+
+        {/* Tabs */}
+        <View style={styles.tabs}>
+          {(['login', 'register'] as const).map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.tab, mode === tab && styles.activeTab]}
+              onPress={() => { setMode(tab); setError(''); }}
+            >
+              <Text style={[styles.tabText, mode === tab && styles.activeTabText]}>
+                {tab === 'login' ? 'Login' : 'Register'}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        {/* Mode Toggle */}
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tab, isLogin && styles.activeTab]}
-            onPress={() => { setIsLogin(true); setError(null); }}
-          >
-            <Text style={[styles.tabText, isLogin && styles.activeTabText]}>Login</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, !isLogin && styles.activeTab]}
-            onPress={() => { setIsLogin(false); setError(null); }}
-          >
-            <Text style={[styles.tabText, !isLogin && styles.activeTabText]}>Register</Text>
-          </TouchableOpacity>
-        </View>
-
+        {/* Inputs */}
         <View style={styles.form}>
-          {error && <Text style={styles.errorText}>{error}</Text>}
-
-          {!isLogin && (
+          {mode === 'register' && (
             <TextInput
               style={styles.input}
               placeholder="Full Name"
@@ -94,17 +86,15 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
               onChangeText={setName}
             />
           )}
-
           <TextInput
             style={styles.input}
-            placeholder="Email Address"
+            placeholder="Email"
             placeholderTextColor="#64748b"
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
             onChangeText={setEmail}
           />
-
           <TextInput
             style={styles.input}
             placeholder="Password"
@@ -113,8 +103,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
             value={password}
             onChangeText={setPassword}
           />
-
-          {!isLogin && (
+          {mode === 'register' && (
             <TextInput
               style={styles.input}
               placeholder="Confirm Password"
@@ -125,105 +114,50 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
             />
           )}
 
-          <TouchableOpacity
-            style={styles.button}
-            onPress={handleAuth}
-            disabled={loading}
-          >
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit} disabled={loading}>
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>{isLogin ? 'Sign In' : 'Create Account'}</Text>
+              <Text style={styles.primaryButtonText}>
+                {mode === 'login' ? 'Login' : 'Create Account'}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: 24,
-    justifyContent: 'center',
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 48,
-  },
-  logoText: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: '#1a56db',
-    letterSpacing: -1,
-  },
-  subTitle: {
-    color: '#94a3b8',
-    fontSize: 16,
-    marginTop: 8,
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 32,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-  activeTab: {
-    backgroundColor: '#334155',
-  },
-  tabText: {
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  activeTabText: {
-    color: '#fff',
-  },
-  form: {
-    width: '100%',
-  },
+  safe: { flex: 1, backgroundColor: '#0f172a' },
+  container: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+  logo: { fontSize: 32, fontWeight: '800', color: '#f8fafc', textAlign: 'center' },
+  tagline: { color: '#64748b', textAlign: 'center', marginTop: 4, marginBottom: 32 },
+  tabs: { flexDirection: 'row', backgroundColor: '#1e293b', borderRadius: 10, marginBottom: 24 },
+  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
+  activeTab: { backgroundColor: '#1a56db' },
+  tabText: { color: '#64748b', fontWeight: '600' },
+  activeTabText: { color: '#ffffff' },
+  form: { gap: 12 },
   input: {
     backgroundColor: '#1e293b',
-    color: '#fff',
-    height: 56,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    marginBottom: 16,
-    fontSize: 16,
+    borderRadius: 10,
+    padding: 14,
+    color: '#f8fafc',
+    fontSize: 15,
     borderWidth: 1,
     borderColor: '#334155',
   },
-  button: {
+  error: { color: '#ef4444', textAlign: 'center', fontSize: 13 },
+  primaryButton: {
     backgroundColor: '#1a56db',
-    height: 56,
-    borderRadius: 12,
-    justifyContent: 'center',
+    borderRadius: 10,
+    padding: 15,
     alignItems: 'center',
-    marginTop: 8,
-    elevation: 4,
+    marginTop: 4,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  errorText: {
-    color: '#ef4444',
-    textAlign: 'center',
-    marginBottom: 16,
-    fontWeight: '500',
-  },
+  primaryButtonText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
 });
-
-export default AuthScreen;

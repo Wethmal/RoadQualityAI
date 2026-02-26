@@ -1,102 +1,89 @@
-import { ref, push, update, onValue, DataSnapshot } from 'firebase/database';
+import { ref, push, update, onValue } from 'firebase/database';
 import { database } from '../config/firebase';
 import { Pothole } from '../types';
 
-/**
- * 1. Report a new pothole detected by the accelerometer
- */
 export const reportPothole = async (
-  userId: string, 
-  lat: number, 
-  lng: number, 
+  userId: string,
+  lat: number,
+  lng: number,
   bumpForce: number
-): Promise<string | null> => {
+): Promise<string> => {
   try {
     const potholeRef = ref(database, 'detected_potholes');
-    
-    const newPotholeData = {
+    const newRef = await push(potholeRef, {
       latitude: lat,
       longitude: lng,
-      bumpForce: bumpForce.toFixed(2),
-      detectedBy: 'accelerometer',
+      bump_force: bumpForce.toFixed(2),
+      detected_by: 'accelerometer',
       timestamp: Date.now(),
-      status: 'active' as const,
-      reporters: { '0': userId }, // Initial reporter
-      confirmationCount: 0,
-      cleanPasses: 0,
-      cleanPassers: {}
-    };
-
-    const newPotholeRef = await push(potholeRef, newPotholeData);
-    return newPotholeRef.key;
-  } catch (error) {
-    console.error("Error reporting pothole:", error);
-    throw new Error("Failed to report pothole data.");
+      status: 'active',
+      reporters: { '0': userId },
+      confirmation_count: 0,
+      clean_passes: 0,
+      clean_passers: {},
+    });
+    return newRef.key as string;
+  } catch (error: any) {
+    throw new Error(error.message || 'Failed to report pothole');
   }
 };
 
-/**
- * 2. Register a "Clean Pass" when a user passes a reported pothole without a bump
- */
 export const registerCleanPass = async (
-  userId: string, 
-  potholeId: string, 
+  userId: string,
+  potholeId: string,
   pothole: Pothole
 ): Promise<void> => {
   try {
-    // Check if user has already reported or clean-passed this pothole
-    const hasReported = Object.keys(pothole.reporters || {}).includes(userId);
-    const hasCleanPassed = Object.keys(pothole.cleanPassers || {}).includes(userId);
+    const reporters = Object.values(pothole.reporters || {});
+    const cleanPassers = Object.values(pothole.cleanPassers || {});
 
-    if (hasReported || hasCleanPassed) {
-      return; // Skip if already interacted
-    }
+    if (reporters.includes(userId)) return;
+    if (cleanPassers.includes(userId)) return;
 
-    const updates: any = {};
-    const newCleanPassCount = (pothole.cleanPasses || 0) + 1;
+    const newCleanPassers = { ...pothole.cleanPassers, [Date.now()]: userId };
+    const newCleanPasses = (pothole.cleanPasses || 0) + 1;
+    const newStatus = newCleanPasses >= 2 ? 'resolved' : 'active';
 
-    // Add user to clean passers list
-    updates[`detected_potholes/${potholeId}/cleanPassers/${userId}`] = true;
-    updates[`detected_potholes/${potholeId}/cleanPasses`] = newCleanPassCount;
-
-    // If 2 or more clean passes, mark as resolved
-    if (newCleanPassCount >= 2) {
-      updates[`detected_potholes/${potholeId}/status`] = 'resolved';
-    }
-
-    await update(ref(database), updates);
-  } catch (error) {
-    console.error("Error registering clean pass:", error);
-    throw new Error("Could not update clean pass status.");
+    await update(ref(database, `detected_potholes/${potholeId}`), {
+      clean_passers: newCleanPassers,
+      clean_passes: newCleanPasses,
+      status: newStatus,
+    });
+  } catch (error: any) {
+    throw new Error(error.message || 'Failed to register clean pass');
   }
 };
 
-/**
- * 3. Real-time subscription to active potholes for the Map view
- */
-export const subscribeToPotholes = (callback: (potholes: Pothole[]) => void): (() => void) => {
-  const potholesRef = ref(database, 'detected_potholes');
+export const subscribeToPotholes = (
+  callback: (potholes: Pothole[]) => void
+): (() => void) => {
+  const potholeRef = ref(database, 'detected_potholes');
 
-  const unsubscribe = onValue(potholesRef, (snapshot: DataSnapshot) => {
+  const unsubscribe = onValue(potholeRef, (snapshot) => {
     const data = snapshot.val();
-    const activePotholes: Pothole[] = [];
-
-    if (data) {
-      Object.keys(data).forEach((key) => {
-        const item = data[key];
-        if (item.status === 'active') {
-          activePotholes.push({
-            id: key,
-            ...item
-          });
-        }
-      });
+    if (!data) {
+      callback([]);
+      return;
     }
-    
-    callback(activePotholes);
-  }, (error) => {
-    console.error("Firebase subscription error:", error);
+
+    const potholes: Pothole[] = Object.entries(data)
+      .map(([id, val]: [string, any]) => ({
+        id,
+        latitude: val.latitude,
+        longitude: val.longitude,
+        bumpForce: val.bump_force,
+        detectedBy: val.detected_by,
+        timestamp: val.timestamp,
+        status: val.status,
+        reporters: val.reporters || {},
+        confirmationCount: val.confirmation_count || 0,
+        cleanPasses: val.clean_passes || 0,
+        cleanPassers: val.clean_passers || {},
+      }))
+      .filter((p) => p.status === 'active');
+
+    callback(potholes);
   });
 
-  return unsubscribe; // Return the function to stop listening
+  return () => unsubscribe();
 };

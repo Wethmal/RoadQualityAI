@@ -1,199 +1,129 @@
 import React, { useEffect, useState } from 'react';
 import {
-  StyleSheet,
-  View,
-  Text,
-  FlatList,
   ActivityIndicator,
+  FlatList,
   SafeAreaView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { ref, onValue } from 'firebase/database';
 import { database } from '../config/firebase';
-import { LeaderboardEntry } from '../types';
+
+interface LeaderboardEntry {
+  userId: string;
+  name: string;
+  totalScore: number;
+  totalTrips: number;
+  rank: number;
+}
 
 interface LeaderboardScreenProps {
   currentUserId: string;
 }
 
-const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ currentUserId }) => {
+const MEDALS = ['🥇', '🥈', '🥉'];
+
+export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ currentUserId }) => {
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [drivers, setDrivers] = useState<LeaderboardEntry[]>([]);
 
   useEffect(() => {
-    // Firebase Realtime Database eken leaderboard node eka kiyaveema [cite: 386]
-    const leaderboardRef = ref(database, 'leaderboard');
-    
-    const unsubscribe = onValue(leaderboardRef, (snapshot) => {
+    const lbRef = ref(database, 'leaderboard');
+    const unsubscribe = onValue(lbRef, async (snapshot) => {
       const data = snapshot.val();
-      if (data) {
-        const list: LeaderboardEntry[] = Object.keys(data).map((key) => ({
-          userId: key,
-          ...data[key],
-        }));
+      if (!data) { setEntries([]); setLoading(false); return; }
 
-        // Total score eka anuwa descending order ekata sort kireema [cite: 119, 333]
-        const sortedList = list.sort((a, b) => b.totalScore - a.totalScore);
-        
-        // Drivers-lata ranks laba deema
-        const rankedList = sortedList.map((item, index) => ({
-          ...item,
-          rank: index + 1,
-        }));
+      // Fetch user names
+      const { ref: dbRef, get } = await import('firebase/database');
+      const sorted: LeaderboardEntry[] = await Promise.all(
+        Object.entries(data).map(async ([uid, val]: [string, any]) => {
+          let name = uid;
+          try {
+            const userSnap = await get(dbRef(database, `users/${uid}`));
+            name = userSnap.val()?.name ?? uid;
+          } catch {}
+          return {
+            userId: uid,
+            name,
+            totalScore: val.total_score ?? 0,
+            totalTrips: val.total_trips ?? 0,
+            rank: 0,
+          };
+        })
+      );
 
-        setDrivers(rankedList);
-      }
+      sorted.sort((a, b) => b.totalScore - a.totalScore);
+      sorted.forEach((e, i) => (e.rank = i + 1));
+
+      setEntries(sorted);
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  const getRankEmoji = (rank: number) => {
-    if (rank === 1) return '🥇';
-    if (rank === 2) return '🥈';
-    if (rank === 3) return '🥉';
-    return `#${rank}`;
-  };
-
-  const renderDriver = ({ item }: { item: LeaderboardEntry }) => {
-    const isCurrentUser = item.userId === currentUserId;
+  const renderItem = ({ item }: { item: LeaderboardEntry }) => {
+    const isMe = item.userId === currentUserId;
+    const medal = item.rank <= 3 ? MEDALS[item.rank - 1] : `#${item.rank}`;
 
     return (
-      <View style={[styles.card, isCurrentUser && styles.currentUserCard]}>
-        <View style={styles.rankContainer}>
-          <Text style={styles.rankText}>{getRankEmoji(item.rank)}</Text>
+      <View style={[styles.row, isMe && styles.myRow]}>
+        <Text style={styles.medal}>{medal}</Text>
+        <View style={styles.info}>
+          <Text style={styles.name}>{item.name}{isMe ? ' (You)' : ''}</Text>
+          <Text style={styles.trips}>{item.totalTrips} trips</Text>
         </View>
-        
-        <View style={styles.infoContainer}>
-          <Text style={styles.nameText} numberOfLines={1}>{item.name}</Text>
-          <Text style={styles.tripsText}>{item.totalTrips} Trips completed</Text>
-        </View>
-
-        <View style={styles.scoreContainer}>
-          <Text style={styles.scoreValue}>{item.totalScore}</Text>
-          <Text style={styles.scoreLabel}>PTS</Text>
-        </View>
+        <Text style={styles.score}>{item.totalScore}</Text>
       </View>
     );
   };
-
-  if (loading) {
-    return (
-      <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color="#1a56db" />
-      </View>
-    );
-  }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Safety Leaderboard</Text>
-        <Text style={styles.headerSub}>Top performing drivers in Sri Lanka</Text>
-      </View>
-
-      <FlatList
-        data={drivers}
-        keyExtractor={(item) => item.userId}
-        renderItem={renderDriver}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>No rankings available yet.</Text>
-        }
-      />
+    <SafeAreaView style={styles.safe}>
+      <Text style={styles.heading}>🏆 Leaderboard</Text>
+      {loading ? (
+        <ActivityIndicator color="#1a56db" style={{ marginTop: 40 }} />
+      ) : (
+        <FlatList
+          data={entries}
+          keyExtractor={(item) => item.userId}
+          renderItem={renderItem}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={
+            <Text style={styles.empty}>No drivers yet. Complete a trip to join!</Text>
+          }
+        />
+      )}
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f172a', // Dark theme background 
-  },
-  loaderContainer: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    padding: 24,
-    backgroundColor: '#1e293b', // Card surface color 
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    marginBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 24,
+  safe: { flex: 1, backgroundColor: '#0f172a' },
+  heading: {
+    color: '#f8fafc',
+    fontSize: 22,
     fontWeight: '800',
-    color: '#fff',
+    textAlign: 'center',
+    paddingVertical: 16,
   },
-  headerSub: {
-    color: '#94a3b8',
-    fontSize: 14,
-    marginTop: 4,
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-  },
-  card: {
+  list: { paddingHorizontal: 16, paddingBottom: 24 },
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#1e293b',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  currentUserCard: {
-    borderColor: '#1a56db', // Highlight current user [cite: 188]
-    backgroundColor: '#1e293b',
-  },
-  rankContainer: {
-    width: 45,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rankText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#f1f5f9',
-  },
-  infoContainer: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  nameText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  tripsText: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  scoreContainer: {
-    alignItems: 'flex-end',
-  },
-  scoreValue: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1a56db', // SafeRoute blue [cite: 261]
-  },
-  scoreLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#94a3b8',
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: '#64748b',
-    marginTop: 40,
-  },
+  myRow: { borderColor: '#1a56db' },
+  medal: { fontSize: 22, width: 40, textAlign: 'center' },
+  info: { flex: 1, marginLeft: 8 },
+  name: { color: '#f8fafc', fontWeight: '700', fontSize: 15 },
+  trips: { color: '#64748b', fontSize: 12, marginTop: 2 },
+  score: { color: '#38bdf8', fontWeight: '800', fontSize: 18 },
+  empty: { color: '#64748b', textAlign: 'center', marginTop: 40, fontSize: 14 },
 });
-
-export default LeaderboardScreen;
